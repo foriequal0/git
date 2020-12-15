@@ -445,6 +445,11 @@ add_msg () {
 		git-subtree-mainline: $latest_old
 		git-subtree-split: $latest_new
 	EOF
+	if test -n "$subdir"
+	then
+		stage_latest_old="$(cache_get latest_old)"
+		echo "git-subtree-split-from: $stage_latest_old"
+	fi
 }
 
 add_squashed_msg () {
@@ -499,6 +504,11 @@ squash_msg () {
 	echo
 	echo "git-subtree-dir: $dir"
 	echo "git-subtree-split: $newsub"
+	if test -n "$subdir"
+	then
+		stage_latest_old="$(cache_get latest_old)"
+		echo "git-subtree-split-from: $stage_latest_old"
+	fi
 }
 
 toptree_for_commit () {
