@@ -689,6 +689,27 @@ process_split_commit () {
 	cache_set latest_old "$rev"
 }
 
+split_commit () {
+	local dir="$1"
+	shift
+
+	# We can't restrict rev-list to only $dir here, because some of our
+	# parents have the $dir contents the root, and those won't match.
+	# (and rev-list --follow doesn't seem to solve this)
+	grl='git rev-list --topo-order --reverse --parents $@'
+	revmax=$(eval "$grl" | wc -l)
+	revcount=0
+	createcount=0
+	extracount=0
+	eval "$grl" |
+	while read rev parents
+	do
+		process_split_commit "$rev" "$parents" "$dir" 0
+	done || exit $?
+
+	cache_get latest_new
+}
+
 cmd_add () {
 	if test -e "$dir"
 	then
@@ -780,22 +801,7 @@ cmd_split () {
 	fi
 
 	unrevs="$(find_existing_splits "$dir" "$revs")"
-
-	# We can't restrict rev-list to only $dir here, because some of our
-	# parents have the $dir contents the root, and those won't match.
-	# (and rev-list --follow doesn't seem to solve this)
-	grl='git rev-list --topo-order --reverse --parents $revs $unrevs'
-	revmax=$(eval "$grl" | wc -l)
-	revcount=0
-	createcount=0
-	extracount=0
-	eval "$grl" |
-	while read rev parents
-	do
-		process_split_commit "$rev" "$parents" "$dir" 0
-	done || exit $?
-
-	latest_new=$(cache_get latest_new)
+	latest_new=$(split_commit "$dir" "$revs" $unrevs)
 	if test -z "$latest_new"
 	then
 		die "No new revisions were found"
