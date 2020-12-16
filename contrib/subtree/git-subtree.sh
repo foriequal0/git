@@ -245,13 +245,14 @@ cache_miss () {
 
 check_parents () {
 	missed=$(cache_miss "$1")
-	local indent=$(($2 + 1))
+	local dir="$2"
+	local indent=$(($3 + 1))
 	for miss in $missed
 	do
 		if ! test -r "$cachedir/notree/$miss"
 		then
 			debug "  incorrect order: $miss"
-			process_split_commit "$miss" "" "$indent"
+			process_split_commit "$miss" "" "$dir" "$indent"
 		fi
 	done
 }
@@ -638,7 +639,8 @@ ensure_valid_ref_format () {
 process_split_commit () {
 	local rev="$1"
 	local parents="$2"
-	local indent=$3
+	local dir="$3"
+	local indent=$4
 
 	if test $indent -eq 0
 	then
@@ -661,7 +663,7 @@ process_split_commit () {
 	fi
 	createcount=$(($createcount + 1))
 	debug "  parents: $parents"
-	check_parents "$parents" "$indent"
+	check_parents "$parents" "$dir" "$indent"
 	newparents=$(cache_get $parents)
 	debug "  newparents: $newparents"
 
@@ -790,7 +792,7 @@ cmd_split () {
 	eval "$grl" |
 	while read rev parents
 	do
-		process_split_commit "$rev" "$parents" 0
+		process_split_commit "$rev" "$parents" "$dir" 0
 	done || exit $?
 
 	latest_new=$(cache_get latest_new)
