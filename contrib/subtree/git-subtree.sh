@@ -805,8 +805,9 @@ process_split_commit () {
 }
 
 split_commit () {
-	local dir="$1"
-	shift
+	local mode="$1"
+	local dir="$2"
+	shift 2
 
 	# We can't restrict rev-list to only $dir here, because some of our
 	# parents have the $dir contents the root, and those won't match.
@@ -824,7 +825,10 @@ split_commit () {
 		then
 			cache_set latest_new "$newrev"
 			cache_set latest_old "$rev"
-			set_from "$newrev" "$rev"
+			if test "$mode" = import
+			then
+				set_from "$newrev" "$rev"
+			fi
 		fi
 	done || exit $?
 
@@ -880,7 +884,7 @@ cmd_add_commit () {
 	then
 		debug "Staging '$rev', subdir '$subdir/'..."
 		cache_setup || exit $?
-		rev=$(split_commit "$subdir" "$rev") || exit $?
+		rev=$(split_commit import "$subdir" "$rev") || exit $?
 		if test -z "$rev"
 		then
 			die "No new revisions were found"
@@ -935,7 +939,7 @@ cmd_split () {
 	fi
 
 	unrevs="$(find_existing_splits "$dir" "$revs")"
-	latest_new=$(split_commit "$dir" "$revs" $unrevs)
+	latest_new=$(split_commit export "$dir" "$revs" $unrevs)
 	if test -z "$latest_new"
 	then
 		die "No new revisions were found"
@@ -980,7 +984,7 @@ cmd_merge () {
 		debug "Staging '$rev', subdir'$subdir/'..."
 		cache_setup || exit $?
 		unrevs="$(find_existing_splits_from "$dir")" || exit $?
-		rev=$(split_commit "$subdir" "$rev" $unrevs) || exit $?
+		rev=$(split_commit import "$subdir" "$rev" $unrevs) || exit $?
 		if test -z "$rev"
 		then
 			die "No new revisions were found"
