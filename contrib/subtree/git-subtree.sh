@@ -755,6 +755,12 @@ cmd_add_commit () {
 	rev=$(git rev-parse $default --revs-only "$@") || exit $?
 	ensure_single_rev $rev
 
+	if test -n "$subdir"
+	then
+		debug "Staging '$rev', subdir '$subdir/'..."
+		cache_setup || exit $?
+		rev=$(split_commit "$subdir" "$rev") || exit $?
+	fi
 	debug "Adding $dir as '$rev'..."
 	git read-tree --prefix="$dir" $rev || exit $?
 	git checkout -- "$dir" || exit $?
@@ -841,6 +847,12 @@ cmd_merge () {
 	ensure_single_rev $rev
 	ensure_clean
 
+	if test -n "$subdir"
+	then
+		debug "Staging '$rev', subdir'$subdir/'..."
+		cache_setup || exit $?
+		rev=$(split_commit "$subdir" "$rev") || exit $?
+	fi
 	if test -n "$squash"
 	then
 		first_split="$(find_latest_squash "$dir")"
