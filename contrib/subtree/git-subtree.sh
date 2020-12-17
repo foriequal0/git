@@ -432,6 +432,9 @@ add_msg () {
 	if test -n "$message"
 	then
 		commit_message="$message"
+	elif test -n "$subdir"
+	then
+		commit_message="Add '$dir/' from commit '$latest_new', subdir '$subdir/'"
 	else
 		commit_message="Add '$dir/' from commit '$latest_new'"
 	fi
@@ -478,15 +481,19 @@ squash_msg () {
 	newsub="$3"
 	newsub_short=$(git rev-parse --short "$newsub")
 
+	if test -n "$subdir"
+	then
+		commit_message_suffix=", subdir '$subdir/'"
+	fi
 	if test -n "$oldsub"
 	then
 		oldsub_short=$(git rev-parse --short "$oldsub")
-		echo "Squashed '$dir/' changes from $oldsub_short..$newsub_short"
+		echo "Squashed '$dir/' changes from $oldsub_short..$newsub_short$commit_message_suffix"
 		echo
 		git log --no-show-signature --pretty=tformat:'%h %s' "$oldsub..$newsub"
 		git log --no-show-signature --pretty=tformat:'REVERT: %h %s' "$newsub..$oldsub"
 	else
-		echo "Squashed '$dir/' content from commit $newsub_short"
+		echo "Squashed '$dir/' content from commit $newsub_short$commit_message_suffix"
 	fi
 
 	echo
