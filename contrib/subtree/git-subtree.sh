@@ -219,6 +219,8 @@ cache_setup () {
 		die "Can't create new cachedir: $cachedir"
 	mkdir -p "$cachedir/notree" ||
 		die "Can't create new cachedir: $cachedir/notree"
+	mkdir -p "$cachedir/from" ||
+		die "Can't create new cachedir: $cachedir/from"
 	debug "Using cachedir: $cachedir" >&2
 }
 
@@ -271,6 +273,25 @@ cache_set () {
 		die "cache for $oldrev already exists!"
 	fi
 	echo "$newrev" >"$cachedir/$oldrev"
+}
+
+get_from () {
+	for newrev in "$@"
+	do
+		assert test -r "$cachedir/from/$newrev"
+		read oldrev <"$cachedir/from/$newrev"
+		echo $oldrev
+	done
+}
+
+set_from () {
+	local newrev="$1"
+	local oldrev="$2"
+	if test -e "$cachedir/from/$newrev"
+	then
+		die "cache for from/$newrev already exists!"
+	fi
+	echo "$oldrev" >"$cachedir/from/$newrev"
 }
 
 rev_exists () {
@@ -777,6 +798,7 @@ split_commit () {
 		then
 			cache_set latest_new "$newrev"
 			cache_set latest_old "$rev"
+			set_from "$newrev" "$rev"
 		fi
 	done || exit $?
 
