@@ -21,6 +21,7 @@ q             quiet
 d             show debug messages
 P,prefix=     the name of the subdir to split out
 m,message=    use the given message as the commit message for the merge commit
+subdir=       the name of the subdir to filter
  options for 'split'
 annotate=     add a prefix to commit message of new commits
 b,branch=     create a new branch from the split subtree
@@ -48,6 +49,7 @@ annotate=
 squash=
 message=
 prefix=
+subdir=
 
 debug () {
 	if test -n "$debug"
@@ -109,6 +111,10 @@ do
 		;;
 	-P)
 		prefix="${1%/}"
+		shift
+		;;
+	--subdir)
+		subdir="${1%/}"
 		shift
 		;;
 	-m)
