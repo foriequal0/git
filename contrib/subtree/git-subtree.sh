@@ -399,6 +399,57 @@ find_existing_splits () {
 	done
 }
 
+find_existing_splits_from () {
+	debug "Looking for where prior splits came from..."
+	dir="$1"
+	main=
+	sub=
+	from=
+	local grep_format="^git-subtree-dir: $dir/*\$"
+	if test -n "$ignore_joins"
+	then
+		grep_format="^Add '$dir/' from commit '"
+	fi
+	git log --grep="$grep_format" \
+		--no-show-signature --pretty=format:'START %H%n%s%n%n%b%nEND%n' HEAD |
+	while read a b junk
+	do
+		case "$a" in
+		START)
+			sq="$b"
+			;;
+		git-subtree-mainline:)
+			main="$b"
+			;;
+		git-subtree-split:)
+			sub="$(git rev-parse "$b^0")" ||
+			die "could not rev-parse split hash $b from commit $sq"
+			;;
+		git-subtree-split-from:)
+			from="$(git rev-parse "$b^0")" ||
+			die "could not rev-parse split-from hash $b from commit $sq"
+			;;
+		END)
+			if test -n "$from"
+			then
+				debug "  Main is: '$main'"
+				if test -n "$main"
+				then
+					debug "  Squash: $sq from $sub (was $from)"
+				else
+					debug "  Prior: $main -> $sub (was $from)"
+				fi
+				cache_set "$from" "$sub"
+				try_remove_previous "$from"
+			fi
+			main=
+			sub=
+			from=
+			;;
+		esac
+	done
+}
+
 copy_commit () {
 	# We're going to set some environment vars here, so
 	# do it in a subshell to get rid of them safely later
@@ -877,7 +928,8 @@ cmd_merge () {
 	then
 		debug "Staging '$rev', subdir'$subdir/'..."
 		cache_setup || exit $?
-		rev=$(split_commit "$subdir" "$rev") || exit $?
+		unrevs="$(find_existing_splits_from "$dir")" || exit $?
+		rev=$(split_commit "$subdir" "$rev" $unrevs) || exit $?
 		if test -z "$rev"
 		then
 			die "No new revisions were found"
