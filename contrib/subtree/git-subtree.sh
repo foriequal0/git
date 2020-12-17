@@ -859,8 +859,11 @@ cmd_add_commit () {
 		then
 			die "No new revisions were found"
 		fi
+		rev_from=$(get_from "$rev") || exit $?
+		debug "Adding $dir as '$rev', subdir '$subdir/' (from '$rev_from')..."
+	else
+		debug "Adding $dir as '$rev'..."
 	fi
-	debug "Adding $dir as '$rev'..."
 	git read-tree --prefix="$dir" $rev || exit $?
 	git checkout -- "$dir" || exit $?
 	tree=$(git write-tree) || exit $?
@@ -956,6 +959,10 @@ cmd_merge () {
 		then
 			die "No new revisions were found"
 		fi
+		rev_from="$(get_from "$rev")" || exit $?
+		debug "Merging $dir as '$rev', subdir '$subdir/' (from '$rev_from')..."
+	else
+		debug "Merging $dir as '$rev'..."
 	fi
 	if test -n "$squash"
 	then
