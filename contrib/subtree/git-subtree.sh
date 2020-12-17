@@ -461,6 +461,7 @@ find_existing_splits_from () {
 					debug "  Prior: $main -> $sub (was $from)"
 				fi
 				cache_set "$from" "$sub"
+				set_from "$sub" "$from"
 				try_remove_previous "$from"
 			fi
 			main=
@@ -519,8 +520,8 @@ add_msg () {
 	EOF
 	if test -n "$subdir"
 	then
-		stage_latest_old="$(cache_get latest_old)"
-		echo "git-subtree-split-from: $stage_latest_old"
+		latest_new_from=$(get_from "$latest_new")
+		echo "git-subtree-split-from: $latest_new_from"
 	fi
 }
 
@@ -553,34 +554,59 @@ rejoin_msg () {
 }
 
 squash_msg () {
+	if test -z "$subdir"
+	then
+		squash_msg_tree "$@"
+	else
+		squash_msg_subdir "$@"
+	fi
+}
+
+squash_msg_tree () {
 	dir="$1"
 	oldsub="$2"
 	newsub="$3"
 	newsub_short=$(git rev-parse --short "$newsub")
 
-	if test -n "$subdir"
-	then
-		commit_message_suffix=", subdir '$subdir/'"
-	fi
 	if test -n "$oldsub"
 	then
 		oldsub_short=$(git rev-parse --short "$oldsub")
-		echo "Squashed '$dir/' changes from $oldsub_short..$newsub_short$commit_message_suffix"
+		echo "Squashed '$dir/' changes from $oldsub_short..$newsub_short"
 		echo
 		git log --no-show-signature --pretty=tformat:'%h %s' "$oldsub..$newsub"
 		git log --no-show-signature --pretty=tformat:'REVERT: %h %s' "$newsub..$oldsub"
 	else
-		echo "Squashed '$dir/' content from commit $newsub_short$commit_message_suffix"
+		echo "Squashed '$dir/' content from commit $newsub_short"
 	fi
 
 	echo
 	echo "git-subtree-dir: $dir"
 	echo "git-subtree-split: $newsub"
-	if test -n "$subdir"
+}
+
+squash_msg_subdir () {
+	dir="$1"
+	oldsub="$2"
+	newsub="$3"
+	newsub_from=$(get_from "$newsub")
+	newsub_short=$(git rev-parse --short "$newsub_from")
+
+	if test -n "$oldsub"
 	then
-		stage_latest_old="$(cache_get latest_old)"
-		echo "git-subtree-split-from: $stage_latest_old"
+		oldsub_from=$(get_from "$oldsub")
+		oldsub_short=$(git rev-parse --short "$oldsub_from")
+		echo "Squashed '$dir/' changes from $oldsub_short..$newsub_short, subdir '$subdir/'"
+		echo
+		git log --no-show-signature --pretty=tformat:'%h %s' "$oldsub_from..$newsub_from" -- "$subdir"
+		git log --no-show-signature --pretty=tformat:'REVERT: %h %s' "$newsub_from..$oldsub_from" -- "$subdir"
+	else
+		echo "Squashed '$dir/' content from commit $newsub_short, subdir '$subdir/'"
 	fi
+
+	echo
+	echo "git-subtree-dir: $dir"
+	echo "git-subtree-split: $newsub"
+	echo "git-subtree-split-from: $newsub_from"
 }
 
 toptree_for_commit () {
