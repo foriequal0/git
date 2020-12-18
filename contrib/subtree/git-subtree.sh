@@ -278,9 +278,11 @@ cache_set () {
 get_from () {
 	for newrev in "$@"
 	do
-		assert test -r "$cachedir/from/$newrev"
-		read oldrev <"$cachedir/from/$newrev"
-		echo $oldrev
+		if test -r "$cachedir/from/$newrev"
+		then
+			read oldrev <"$cachedir/from/$newrev"
+			echo $oldrev
+		fi
 	done
 }
 
@@ -426,6 +428,7 @@ find_existing_splits () {
 find_existing_splits_from () {
 	debug "Looking for where prior splits came from..."
 	dir="$1"
+	revs="$2"
 	main=
 	sub=
 	from=
@@ -435,7 +438,7 @@ find_existing_splits_from () {
 		grep_format="^Add '$dir/' from commit '"
 	fi
 	git log --grep="$grep_format" \
-		--no-show-signature --pretty=format:'START %H%n%s%n%n%b%nEND%n' HEAD |
+		--no-show-signature --pretty=format:'START %H%n%s%n%n%b%nEND%n' "$revs" |
 	while read a b junk
 	do
 		case "$a" in
@@ -554,6 +557,12 @@ rejoin_msg () {
 		git-subtree-mainline: $latest_old
 		git-subtree-split: $latest_new
 	EOF
+
+	if test -n "$subdir"
+	then
+		latest_new_from=$(cache_get "$latest_new")
+		echo "git-subtree-split-from: $latest_new_from"
+	fi
 }
 
 squash_msg () {
@@ -838,6 +847,71 @@ split_commit () {
 	cache_get latest_new
 }
 
+process_transplant_commit () {
+	local rev="$1"
+	local parents="$2"
+	local dir="$3"
+	local indent=$4
+
+	if test $indent -eq 0
+	then
+		revcount=$(($revcount + 1))
+	else
+		# processing commit without normal parent information;
+		# fetch from repo
+		parents=$(git rev-parse "$rev^@")
+		extracount=$(($extracount + 1))
+	fi
+
+	progress "$revcount/$revmax ($createcount) [$extracount]"
+
+	debug "Transplanting commit: $rev"
+	exists=$(get_from "$rev")
+	if test -n "$exists"
+	then
+		debug "  prior: $exists"
+		return
+	fi
+	createcount=$(($createcount + 1))
+	debug "  parents: $parents"
+	check_parents "$parents" "$dir" "$indent"
+	newparents=$(get_from $parents | uniq)
+	debug "  newparents: $newparents"
+
+	for parent in $newparents
+	do
+		ptree="$(toptree_for_commit "$parent")" || exit $?
+		git read-tree -m "$ptree" || exit $?
+		p="$p -p $parent"
+	done
+	tree=$(toptree_for_commit "$rev")
+	git read-tree --prefix "$dir" "$tree" || exit $?
+	tree="$(git write-tree)"
+	debug "  tree is: $tree"
+
+	newrev=$(copy_commit "$rev" "$tree" "$p") || exit $?
+	debug "  newrev is: $newrev"
+	cache_set "$rev" "$newrev"
+}
+
+transplant_commit () {
+	local dir="$1"
+	shift 1
+
+	grl='git rev-list --topo-order --reverse --parents $@'
+	revmax=$(eval "$grl" | wc -l)
+	revcount=0
+	createcount=0
+	extracount=0
+	eval "$grl" |
+	while read rev parents
+	do
+		process_transplant_commit "$rev" "$parents" "$dir" 0
+	done || exit $?
+
+	cache_get latest_new
+}
+
 cmd_add () {
 	if test -e "$dir"
 	then
@@ -927,10 +1001,23 @@ cmd_add_commit () {
 cmd_split () {
 	debug "Splitting $dir..."
 	cache_setup || exit $?
+	ensure_clean
 
 	if test -n "$onto"
 	then
-		debug "Reading history for --onto=$onto..."
+		if test -z "$subdir"
+		then
+			debug "Reading history for --onto=$onto..."
+		else
+			debug "Populating staging branch for '$rev', subdir '$subdir/'..."
+			splits_from="$(find_existing_splits_from "$dir" HEAD)"
+			unrevs="$(try_remove_previous $splits_from)"
+			split_commit import "$subdir" "$onto" $unrevs || exit $?
+			onto_from="$onto"
+			onto="$(cache_get "$onto")"
+			debug "Reading history for --onto=$onto_from (staged onto $onto)..."
+		fi
+
 		git rev-list $onto |
 		while read rev
 		do
@@ -948,15 +1035,27 @@ cmd_split () {
 		die "No new revisions were found"
 	fi
 
+	latest_old=$(cache_get latest_old)
+
+	if test -n "$subdir"
+	then
+		transplant_commit "$subdir" "$revs" $unrevs || exit $?
+	fi
+
 	if test -n "$rejoin"
 	then
 		debug "Merging split branch into HEAD..."
-		latest_old=$(cache_get latest_old)
 		git merge -s ours \
 			--allow-unrelated-histories \
 			-m "$(rejoin_msg "$dir" "$latest_old" "$latest_new")" \
 			"$latest_new" >&2 || exit $?
 	fi
+
+	if test -n "$subdir"
+	then
+		latest_new=$(cache_get "$latest_new")
+	fi
+
 	if test -n "$branch"
 	then
 		if rev_exists "refs/heads/$branch"
@@ -986,7 +1085,7 @@ cmd_merge () {
 	then
 		debug "Staging '$rev', subdir'$subdir/'..."
 		cache_setup || exit $?
-		splits_from="$(find_existing_splits_from "$dir")" || exit $?
+		splits_from="$(find_existing_splits_from "$dir" HEAD)" || exit $?
 		unrevs="$(try_remove_previous $splits_from)"
 		rev=$(split_commit import "$subdir" "$rev" $unrevs) || exit $?
 		if test -z "$rev"
