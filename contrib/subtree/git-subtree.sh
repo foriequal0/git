@@ -614,9 +614,11 @@ copy_or_skip () {
 	fi
 	if test -n "$identical" && test -z "$copycommit"
 	then
-		echo $identical
+		cache_set "$rev" "$identical"
 	else
-		copy_commit "$rev" "$tree" "$p" || exit $?
+		newrev="$(copy_commit "$rev" "$tree" "$p")" || exit $?
+		echo "$newrev"
+		cache_set "$rev" "$newrev"
 	fi
 }
 
@@ -684,9 +686,7 @@ process_split_commit () {
 
 	newrev=$(copy_or_skip "$rev" "$tree" "$newparents") || exit $?
 	debug "  newrev is: $newrev"
-	cache_set "$rev" "$newrev"
-	cache_set latest_new "$newrev"
-	cache_set latest_old "$rev"
+	echo "$newrev"
 }
 
 split_commit () {
@@ -704,7 +704,12 @@ split_commit () {
 	eval "$grl" |
 	while read rev parents
 	do
-		process_split_commit "$rev" "$parents" "$dir" 0
+		newrev="$(process_split_commit "$rev" "$parents" "$dir" 0)" || exit $?
+		if test -n "$newrev"
+		then
+			cache_set latest_new "$newrev"
+			cache_set latest_old "$rev"
+		fi
 	done || exit $?
 
 	cache_get latest_new
@@ -760,6 +765,10 @@ cmd_add_commit () {
 		debug "Staging '$rev', subdir '$subdir/'..."
 		cache_setup || exit $?
 		rev=$(split_commit "$subdir" "$rev") || exit $?
+		if test -z "$rev"
+		then
+			die "No new revisions were found"
+		fi
 	fi
 	debug "Adding $dir as '$rev'..."
 	git read-tree --prefix="$dir" $rev || exit $?
@@ -852,6 +861,10 @@ cmd_merge () {
 		debug "Staging '$rev', subdir'$subdir/'..."
 		cache_setup || exit $?
 		rev=$(split_commit "$subdir" "$rev") || exit $?
+		if test -z "$rev"
+		then
+			die "No new revisions were found"
+		fi
 	fi
 	if test -n "$squash"
 	then
