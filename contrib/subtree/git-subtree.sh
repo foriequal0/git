@@ -321,10 +321,14 @@ rev_is_descendant_of_branch () {
 # to remove the parent from the rev-list, and since it doesn't exist, it won't
 # be there anyway, so do nothing in that case.
 try_remove_previous () {
-	if rev_exists "$1^"
-	then
-		echo "^$1^"
-	fi
+	while test $# -gt 0
+	do
+		if rev_exists "$1^"
+		then
+			echo "^$1^"
+		fi
+		shift
+	done
 }
 
 find_latest_squash () {
@@ -410,8 +414,7 @@ find_existing_splits () {
 				debug "  Prior: $main -> $sub"
 				cache_set $main $sub
 				cache_set $sub $sub
-				try_remove_previous "$main"
-				try_remove_previous "$sub"
+				try_remove_previous "$main" "$sub"
 			fi
 			main=
 			sub=
@@ -462,7 +465,7 @@ find_existing_splits_from () {
 				fi
 				cache_set "$from" "$sub"
 				set_from "$sub" "$from"
-				try_remove_previous "$from"
+				echo "$from"
 			fi
 			main=
 			sub=
@@ -983,7 +986,8 @@ cmd_merge () {
 	then
 		debug "Staging '$rev', subdir'$subdir/'..."
 		cache_setup || exit $?
-		unrevs="$(find_existing_splits_from "$dir")" || exit $?
+		splits_from="$(find_existing_splits_from "$dir")" || exit $?
+		unrevs="$(try_remove_previous $splits_from)"
 		rev=$(split_commit import "$subdir" "$rev" $unrevs) || exit $?
 		if test -z "$rev"
 		then
